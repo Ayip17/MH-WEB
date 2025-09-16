@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monster Hunter Prototype - Complete</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #2c3e50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        .game-container {
+            text-align: center;
+            background: #34495e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        
+        canvas {
+            border: 3px solid #ecf0f1;
+            border-radius: 5px;
+            background: #27ae60;
+            display: block;
+            margin: 10px auto;
+        }
+        
+        .controls {
+            color: #ecf0f1;
+            margin-top: 15px;
+        }
+        
+        .controls h3 {
+            margin: 10px 0;
+            color: #3498db;
+        }
+        
+        .control-item {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .stats {
+            color: #ecf0f1;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            color: #ecf0f1;
+            font-family: monospace;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        .health-bar {
+            width: 200px;
+            height: 20px;
+            background: #2c3e50;
+            border: 2px solid #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e74c3c, #c0392b);
+            transition: width 0.3s ease;
+        }
+
+        .dash-cooldown {
+            width: 150px;
+            height: 15px;
+            background: #2c3e50;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .dash-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f39c12, #e67e22);
+            transition: width 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 style="color: #e74c3c; margin: 0;">🎮 Monster Hunter Complete</h1>
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+        
+        <!-- UI Overlay -->
+        <div class="ui-overlay">
+            <div>❤️ HUNTER HP</div>
+            <div class="health-bar">
+                <div class="health-fill" id="playerHealthFill"></div>
+            </div>
+            <div>🏃‍♂️ DASH READY</div>
+            <div class="dash-cooldown">
+                <div class="dash-fill" id="dashCooldownFill"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <h3>Complete Controls:</h3>
+            <div class="control-item">🎯 <strong>WASD / Arrow Keys:</strong> Move Player</div>
+            <div class="control-item">🏃‍♂️ <strong>Shift:</strong> Dash with I-Frames!</div>
+            <div class="control-item">⚔️ <strong>Hold Mouse:</strong> Attack towards cursor</div>
+            <div class="control-item">🛡️ <strong>Blue Slimes:</strong> Have shields (2 hits to break!)</div>
+        </div>
+        
+        <div class="stats" id="gameStats">
+            Position: (0, 0) | Slimes: 2 | Status: Ready
+        </div>
+    </div>
+
+    <script>
+        // Game Canvas Setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game State
+        let gameRunning = true;
+        let gameTime = 0;
+        
+        // Player Object
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,   
+            width: 30,
+            height: 30,
+            color: '#e74c3c',
+            speed: 5,
+            
+            // Health System
+            maxHealth: 100,
+            health: 100,
+            invulnerable: false,
+            invulnerabilityTime: 1000, // 1 second
+            invulnerabilityTimer: 0,
+            
+            // Dash System
+            isDashing: false,
+            dashSpeed: 15,
+            dashDuration: 200, // 200ms dash
+            dashCooldown: 800, // 800ms cooldown
+            dashTimer: 0,
+            dashCooldownTimer: 0,
+            dashTrail: [], // For orange trail effect
+            
+            // Movement
+            isMoving: false,
+            direction: { x: 0, y: 0 },
+            
+            // Combat
+            isAttacking: false,
+            attackRange: 80,
+            attackAngle: 45,
+            attackDirection: { x: 0, y: 0 },
+            attackCooldown: 0,
+            attackDuration: 300,
+            attackDamage: 20
+        };
+        
+        // Slime Enemy System
+        const slimes = [];
+        const drops = [];
+        let bossSlime = null;
+        
+        // Drop item class
+        class Drop {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 12;
+                this.height = 12;
+                this.color = this.getRandomColor();
+                this.bounceY = 0;
+                this.bounceSpeed = 2;
+                this.collected = false;
+                this.glowEffect = 0;
+            }
+            
+            getRandomColor() {
+                const colors = ['#f1c40f', '#e67e22', '#9b59b6', '#1abc9c', '#e74c3c'];
+                return colors[Math.floor(Math.random() * colors.length)];
+            }
+            
+            update() {
+                // Bounce animation
+                this.bounceY += this.bounceSpeed;
+                if (this.bounceY > 10 || this.bounceY < -10) {
+                    this.bounceSpeed *= -1;
+                }
+                
+                // Glow effect
+                this.glowEffect += 0.1;
+                
+                // Check if player collects it
+                const dx = (player.x + player.width/2) - (this.x + this.width/2);
+                const dy = (player.y + player.height/2) - (this.y + this.height/2);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < 25) {
+                    this.collected = true;
+                    console.log("💎 LOOT COLLECTED!");
+                    return true;
+                }
+                return false;
+            }
+            
+            render() {
+                // Glow effect
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10 + Math.sin(this.glowEffect) * 5;
+                
+                // Draw drop with bounce
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y + this.bounceY, this.width, this.height);
+                
+                // Inner shine
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.fillRect(this.x + 2, this.y + this.bounceY + 2, this.width - 4, this.height - 4);
+                
+                ctx.shadowBlur = 0;
+            }
+        }
+        
+        // Boss Slime Class
+        class BossSlime {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 60;  // 2x bigger than normal slime
+                this.height = 60;
+                this.color = '#8e44ad'; // Purple boss color
+                this.speed = 1.5; // Slower but more menacing
+                
+                // Boss stats
+                this.maxHealth = 200;
+                this.health = 200;
+                this.hasShield = true;
+                this.shieldHits = 5; // Much stronger shield
+                this.maxShieldHits = 5;
+                
+                // Enhanced combat
+                this.attackDamage = 25; // More damage
+                this.attackRange = 60;  // Longer range
+                this.attackCooldown = 1500; // Faster attacks
+                this.attackTimer = 0;
+                
+                // Special abilities
+                this.chargeAttack = false;
+                this.chargeTimer = 0;
+                this.chargeCooldown = 5000; // Charge every 5 seconds
+                this.chargeSpeed = 8;
+                
+                // Visual effects
+                this.takingDamage = false;
+                this.damageFlashTimer = 0;
+                this.intimidationAura = 0;
+                
+                // AI
+                this.target = player;
+                this.lastShieldReset = Date.now();
+                this.defeated = false;
+            }
+            
+            update() {
+                if (this.defeated) return;
+                
+                // Update timers
+                if (this.attackTimer > 0) this.attackTimer -= 16;
+                if (this.damageFlashTimer > 0) this.damageFlashTimer -= 16;
+                if (this.chargeTimer > 0) this.chargeTimer -= 16;
+                if (this.damageFlashTimer <= 0) this.takingDamage = false;
+                
+                // Intimidation aura effect
+                this.intimidationAura += 0.05;
+                
+                // Shield regeneration (boss is tougher)
+                if (!this.hasShield && Date.now() - this.lastShieldReset > 8000) {
+                    if (Math.random() < 0.2) {
+                        this.hasShield = true;
+                        this.shieldHits = this.maxShieldHits;
+                        this.lastShieldReset = Date.now();
+                        console.log("🛡️ BOSS SHIELD REGENERATED!");
+                    }
+                }
+                
+                const dx = this.target.x - this.x;
+                const dy = this.target.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Charge attack logic
+                if (this.chargeTimer <= 0 && distance > 100) {
+                    this.chargeAttack = true;
+                    this.chargeTimer = this.chargeCooldown;
+                    console.log("💀 BOSS CHARGE ATTACK!");
+                }
+                
+                // Movement AI
+                if (this.chargeAttack && distance > this.attackRange) {
+                    // Fast charge towards player
+                    this.x += (dx / distance) * this.chargeSpeed;
+                    this.y += (dy / distance) * this.chargeSpeed;
+                    
+                    // Stop charging when close
+                    if (distance < 50) {
+                        this.chargeAttack = false;
+                    }
+                } else if (distance > this.attackRange && distance > 0) {
+                    // Normal movement
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                }
+                
+                // Attack player
+                if (distance <= this.attackRange && this.attackTimer <= 0) {
+                    this.attackPlayer();
+                }
+                
+                // Keep in bounds
+                this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+                this.y = Math.max(0, Math.min(canvas.height - this.height, this.y));
+            }
+            
+            attackPlayer() {
+                if (player.isDashing || player.invulnerable) return;
+                
+                this.attackTimer = this.attackCooldown;
+                
+                // Boss deals more damage
+                player.health -= this.attackDamage;
+                player.invulnerable = true;
+                player.invulnerabilityTimer = player.invulnerabilityTime;
+                
+                console.log(`💀 BOSS ATTACKS! Player HP: ${player.health}`);
+                
+                if (player.health <= 0) {
+                    player.health = 0;
+                    console.log("💀 HUNTER DOWN BY BOSS!");
+                }
+            }
+            
+            takeDamage(damage) {
+                if (this.hasShield) {
+                    this.shieldHits--;
+                    console.log(`🛡️ BOSS SHIELD HIT! Remaining: ${this.shieldHits}`);
+                    
+                    if (this.shieldHits <= 0) {
+                        this.hasShield = false;
+                        console.log("🔥 BOSS SHIELD BROKEN!");
+                    }
+                } else {
+                    this.health -= damage;
+                    console.log(`💀 BOSS takes ${damage} damage! HP: ${this.health}`);
+                }
+                
+                this.takingDamage = true;
+                this.damageFlashTimer = 300; // Longer flash for boss
+                
+                if (this.health <= 0) {
+                    this.defeated = true;
+                    this.dropLoot();
+                    console.log("🏆 BOSS DEFEATED! LOOT INCOMING!");
+                    return true;
+                }
+                return false;
+            }
+            
+            dropLoot() {
+                // Drop 1-4 items randomly around boss position
+                const dropCount = Math.floor(Math.random() * 4) + 1;
+                console.log(`💎 Dropping ${dropCount} items!`);
+                
+                for (let i = 0; i < dropCount; i++) {
+                    const angle = (Math.PI * 2 * i) / dropCount;
+                    const distance = 40;
+                    const dropX = this.x + this.width/2 + Math.cos(angle) * distance;
+                    const dropY = this.y + this.height/2 + Math.sin(angle) * distance;
+                    
+                    drops.push(new Drop(dropX - 6, dropY - 6));
+                }
+            }
+            
+            render() {
+                if (this.defeated) return;
+                
+                // Intimidation aura
+                ctx.strokeStyle = `rgba(142, 68, 173, ${0.3 + Math.sin(this.intimidationAura) * 0.2})`;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y + this.height/2, 80, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Determine color
+                let renderColor = this.color;
+                if (this.takingDamage) {
+                    renderColor = '#e74c3c';
+                } else if (this.chargeAttack) {
+                    renderColor = '#c0392b'; // Red when charging
+                } else if (this.hasShield) {
+                    renderColor = '#663399'; // Darker purple with shield
+                }
+                
+                // Boss body (bigger!)
+                ctx.fillStyle = renderColor;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Boss outline (thicker)
+                ctx.strokeStyle = this.hasShield ? '#522d80' : '#7d3c98';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+                
+                // Shield effect (stronger visual)
+                if (this.hasShield) {
+                    ctx.fillStyle = 'rgba(102, 51, 153, 0.4)';
+                    ctx.fillRect(this.x - 4, this.y - 4, this.width + 8, this.height + 8);
+                    
+                    // Shield strength
+                    ctx.fillStyle = '#ecf0f1';
+                    ctx.font = '16px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.shieldHits.toString(), 
+                               this.x + this.width/2, this.y - 12);
+                }
+                
+                // Boss crown indicator
+                ctx.fillStyle = '#f1c40f';
+                ctx.font = '20px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('👑', this.x + this.width/2, this.y - 25);
+                
+                // Health bar (bigger for boss)
+                this.drawBossHealthBar();
+                
+                // Attack warning
+                if (this.attackTimer <= 200) {
+                    ctx.strokeStyle = '#e74c3c';
+                    ctx.lineWidth = 3;
+                    ctx.globalAlpha = 0.6;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width/2, this.y + this.height/2, 
+                           this.attackRange, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+                
+                // Charge attack warning
+                if (this.chargeAttack) {
+                    ctx.strokeStyle = '#c0392b';
+                    ctx.lineWidth = 5;
+                    ctx.globalAlpha = 0.8;
+                    ctx.setLineDash([10, 5]);
+                    
+                    // Draw line to player
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.width/2, this.y + this.height/2);
+                    ctx.lineTo(player.x + player.width/2, player.y + player.height/2);
+                    ctx.stroke();
+                    
+                    ctx.setLineDash([]);
+                    ctx.globalAlpha = 1;
+                }
+            }
+            
+            drawBossHealthBar() {
+                const barWidth = 80;
+                const barHeight = 8;
+                const barX = this.x - 10;
+                const barY = this.y - 20;
+                
+                // Background
+                ctx.fillStyle = '#2c3e50';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+                
+                // Health fill
+                const healthPercent = this.health / this.maxHealth;
+                ctx.fillStyle = healthPercent > 0.6 ? '#8e44ad' : 
+                               healthPercent > 0.3 ? '#e67e22' : '#e74c3c';
+                ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+                
+                // Border
+                ctx.strokeStyle = '#f1c40f';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+                
+                // Boss HP text
+                ctx.fillStyle = '#ecf0f1';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`BOSS: ${this.health}/${this.maxHealth}`, 
+                           this.x + this.width/2, barY - 5);
+            }
+        }
+        
+        class Slime {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 25;
+                this.height = 25;
+                this.color = '#3498db'; // Blue base color
+                this.speed = 2;
+                
+                // Health & Shield
+                this.maxHealth = 60;
+                this.health = 60;
+                this.hasShield = true;
+                this.shieldHits = 2; // Takes 2 hits to break shield
+                this.maxShieldHits = 2;
+                
+                // Combat
+                this.attackDamage = 15;
+                this.attackRange = 35;
+                this.attackCooldown = 2000; // 2 seconds
+                this.attackTimer = 0;
+                
+                // Visual effects
+                this.takingDamage = false;
+                this.damageFlashTimer = 0;
+                
+                // AI State
+                this.target = player;
+                this.lastShieldReset = Date.now();
+            }
+            
+            update() {
+                // Update timers
+                if (this.attackTimer > 0) this.attackTimer -= 16;
+                if (this.damageFlashTimer > 0) this.damageFlashTimer -= 16;
+                if (this.damageFlashTimer <= 0) this.takingDamage = false;
+                
+                // Shield regeneration (random)
+                if (!this.hasShield && Date.now() - this.lastShieldReset > 5000) {
+                    if (Math.random() < 0.3) { // 30% chance per frame to reset
+                        this.hasShield = true;
+                        this.shieldHits = this.maxShieldHits;
+                        this.lastShieldReset = Date.now();
+                        console.log("🛡️ Slime shield regenerated!");
+                    }
+                }
+                
+                // Chase AI - Move towards player
+                const dx = this.target.x - this.x;
+                const dy = this.target.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > this.attackRange && distance > 0) {
+                    // Move towards player
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                }
+                
+                // Attack player if in range and not on cooldown
+                if (distance <= this.attackRange && this.attackTimer <= 0) {
+                    this.attackPlayer();
+                }
+                
+                // Keep in bounds
+                this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+                this.y = Math.max(0, Math.min(canvas.height - this.height, this.y));
+            }
+            
+            attackPlayer() {
+                // Don't attack if player is dashing (invincible) or already invulnerable
+                if (player.isDashing || player.invulnerable) return;
+                
+                this.attackTimer = this.attackCooldown;
+                
+                // Deal damage to player
+                player.health -= this.attackDamage;
+                player.invulnerable = true;
+                player.invulnerabilityTimer = player.invulnerabilityTime;
+                
+                console.log(`👾 Slime attacks! Player HP: ${player.health}`);
+                
+                // Check if player is dead
+                if (player.health <= 0) {
+                    player.health = 0;
+                    console.log("💀 HUNTER DOWN!");
+                }
+            }
+            
+            takeDamage(damage) {
+                if (this.hasShield) {
+                    this.shieldHits--;
+                    console.log(`🛡️ Shield hit! Remaining: ${this.shieldHits}`);
+                    
+                    if (this.shieldHits <= 0) {
+                        this.hasShield = false;
+                        console.log("🔥 Shield broken!");
+                    }
+                } else {
+                    this.health -= damage;
+                    console.log(`👾 Slime takes ${damage} damage! HP: ${this.health}`);
+                }
+                
+                // Visual damage feedback
+                this.takingDamage = true;
+                this.damageFlashTimer = 200;
+                
+                return this.health <= 0;
+            }
+            
+            render() {
+                // Determine color based on state
+                let renderColor = this.color;
+                if (this.takingDamage) {
+                    renderColor = '#e74c3c'; // Red when taking damage
+                } else if (this.hasShield) {
+                    renderColor = '#3498db'; // Blue with shield
+                } else {
+                    renderColor = '#2ecc71'; // Green without shield
+                }
+                
+                // Draw slime body
+                ctx.fillStyle = renderColor;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw outline
+                ctx.strokeStyle = this.hasShield ? '#2980b9' : '#27ae60';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+                
+                // Draw shield indicator
+                if (this.hasShield) {
+                    ctx.fillStyle = 'rgba(52, 152, 219, 0.6)';
+                    ctx.fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
+                    
+                    // Shield strength indicator
+                    ctx.fillStyle = '#ecf0f1';
+                    ctx.font = '12px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.shieldHits.toString(), 
+                               this.x + this.width/2, this.y - 8);
+                }
+                
+                // Health bar above slime
+                this.drawHealthBar();
+                
+                // Attack range indicator (when about to attack)
+                if (this.attackTimer <= 100) {
+                    ctx.strokeStyle = '#e74c3c';
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width/2, this.y + this.height/2, 
+                           this.attackRange, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            }
+            
+            drawHealthBar() {
+                const barWidth = 30;
+                const barHeight = 4;
+                const barX = this.x;
+                const barY = this.y - 10;
+                
+                // Background
+                ctx.fillStyle = '#2c3e50';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+                
+                // Health fill
+                const healthPercent = this.health / this.maxHealth;
+                ctx.fillStyle = healthPercent > 0.5 ? '#2ecc71' : 
+                               healthPercent > 0.25 ? '#f39c12' : '#e74c3c';
+                ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+                
+                // Border
+                ctx.strokeStyle = '#ecf0f1';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+            }
+        }
+        
+        // Initialize slimes and boss
+        function spawnSlimes() {
+            // Spawn normal slimes
+            slimes.push(new Slime(100, 100));
+            slimes.push(new Slime(canvas.width - 150, canvas.height - 150));
+            
+            // Spawn boss slime in center-ish area
+            bossSlime = new BossSlime(canvas.width/2 - 30, canvas.height/2 - 30);
+            console.log("👑 BOSS SLIME HAS APPEARED!");
+        }
+        
+        // Input Handling
+        const keys = {
+            w: false, a: false, s: false, d: false,
+            up: false, down: false, left: false, right: false,
+            shift: false
+        };
+        
+        const mouse = {
+            x: 0, y: 0,
+            isPressed: false,
+            isHeld: false
+        };
+        
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+        
+        // Event Listeners
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'w': keys.w = true; break;
+                case 'a': keys.a = true; break;
+                case 's': keys.s = true; break;
+                case 'd': keys.d = true; break;
+                case 'arrowup': keys.up = true; break;
+                case 'arrowdown': keys.down = true; break;
+                case 'arrowleft': keys.left = true; break;
+                case 'arrowright': keys.right = true; break;
+                case 'shift': 
+                    if (!keys.shift && player.dashCooldownTimer <= 0 && !player.isDashing) {
+                        startDash();
+                    }
+                    keys.shift = true; 
+                    break;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'w': keys.w = false; break;
+                case 'a': keys.a = false; break;
+                case 's': keys.s = false; break;
+                case 'd': keys.d = false; break;
+                case 'arrowup': keys.up = false; break;
+                case 'arrowdown': keys.down = false; break;
+                case 'arrowleft': keys.left = false; break;
+                case 'arrowright': keys.right = false; break;
+                case 'shift': keys.shift = false; break;
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const pos = getMousePos(e);
+            mouse.x = pos.x;
+            mouse.y = pos.y;
+        });
+        
+        canvas.addEventListener('mousedown', (e) => {
+            mouse.isPressed = true;
+            mouse.isHeld = true;
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            mouse.isPressed = false;
+            mouse.isHeld = false;
+        });
+        
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+        
+        // Dash System
+        function startDash() {
+            player.isDashing = true;
+            player.dashTimer = player.dashDuration;
+            player.dashCooldownTimer = player.dashCooldown;
+            
+            // Determine dash direction
+            let dashDir = { x: 0, y: 0 };
+            
+            // Priority 1: Current movement direction
+            if (player.isMoving) {
+                dashDir.x = player.direction.x;
+                dashDir.y = player.direction.y;
+            } 
+            // Priority 2: Towards cursor
+            else {
+                const centerX = player.x + player.width / 2;
+                const centerY = player.y + player.height / 2;
+                const deltaX = mouse.x - centerX;
+                const deltaY = mouse.y - centerY;
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                
+                if (distance > 0) {
+                    dashDir.x = deltaX / distance;
+                    dashDir.y = deltaY / distance;
+                }
+            }
+            
+            // Store dash direction
+            player.dashDirection = dashDir;
+            
+            console.log("🏃‍♂️ DASH! Direction:", dashDir);
+        }
+        
+        // Update Player
+        function updatePlayer() {
+            // Update timers
+            if (player.attackCooldown > 0) player.attackCooldown -= 16;
+            if (player.dashTimer > 0) player.dashTimer -= 16;
+            if (player.dashCooldownTimer > 0) player.dashCooldownTimer -= 16;
+            if (player.invulnerabilityTimer > 0) player.invulnerabilityTimer -= 16;
+            
+            // Update invulnerability
+            if (player.invulnerabilityTimer <= 0) {
+                player.invulnerable = false;
+            }
+            
+            // Update dash state
+            if (player.dashTimer <= 0) {
+                player.isDashing = false;
+            }
+            
+            // Handle attack input
+            if (mouse.isHeld && player.attackCooldown <= 0 && !player.isDashing) {
+                startAttack();
+            } else if (!mouse.isHeld) {
+                player.isAttacking = false;
+            }
+            
+            // Movement input
+            player.isMoving = false;
+            player.direction.x = 0;
+            player.direction.y = 0;
+            
+            if (keys.w || keys.up) {
+                player.direction.y = -1;
+                player.isMoving = true;
+            }
+            if (keys.s || keys.down) {
+                player.direction.y = 1;
+                player.isMoving = true;
+            }
+            if (keys.a || keys.left) {
+                player.direction.x = -1;
+                player.isMoving = true;
+            }
+            if (keys.d || keys.right) {
+                player.direction.x = 1;
+                player.isMoving = true;
+            }
+            
+            // Normalize diagonal movement
+            if (player.direction.x !== 0 && player.direction.y !== 0) {
+                player.direction.x *= 0.7071;
+                player.direction.y *= 0.7071;
+            }
+            
+            // Apply movement (dash takes priority)
+            let moveSpeed = player.speed;
+            let moveDir = player.direction;
+            
+            if (player.isDashing) {
+                moveSpeed = player.dashSpeed;
+                moveDir = player.dashDirection;
+                
+                // Add to trail
+                player.dashTrail.push({
+                    x: player.x + player.width/2,
+                    y: player.y + player.height/2,
+                    life: 200 // Trail life in ms
+                });
+                
+                // Limit trail length
+                if (player.dashTrail.length > 10) {
+                    player.dashTrail.shift();
+                }
+            }
+            
+            const newX = player.x + (moveDir.x * moveSpeed);
+            const newY = player.y + (moveDir.y * moveSpeed);
+            
+            // Boundary checking
+            if (newX >= 0 && newX <= canvas.width - player.width) {
+                player.x = newX;
+            }
+            if (newY >= 0 && newY <= canvas.height - player.height) {
+                player.y = newY;
+            }
+            
+            // Update dash trail
+            for (let i = player.dashTrail.length - 1; i >= 0; i--) {
+                player.dashTrail[i].life -= 16;
+                if (player.dashTrail[i].life <= 0) {
+                    player.dashTrail.splice(i, 1);
+                }
+            }
+        }
+        
+        function startAttack() {
+            player.isAttacking = true;
+            player.attackCooldown = player.attackDuration;
+            
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            
+            const deltaX = mouse.x - playerCenterX;
+            const deltaY = mouse.y - playerCenterY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            player.attackDirection.x = deltaX / distance;
+            player.attackDirection.y = deltaY / distance;
+            
+            // Check for slime hits
+            checkAttackHits();
+        }
+        
+        function checkAttackHits() {
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            
+            // Check boss hit first
+            if (bossSlime && !bossSlime.defeated) {
+                const bossCenterX = bossSlime.x + bossSlime.width / 2;
+                const bossCenterY = bossSlime.y + bossSlime.height / 2;
+                
+                const dx = bossCenterX - playerCenterX;
+                const dy = bossCenterY - playerCenterY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance <= player.attackRange) {
+                    const angleToSlime = Math.atan2(dy, dx);
+                    const attackAngle = Math.atan2(player.attackDirection.y, player.attackDirection.x);
+                    const halfArc = (player.attackAngle * Math.PI / 180) / 2;
+                    
+                    let angleDiff = Math.abs(angleToSlime - attackAngle);
+                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                    
+                    if (angleDiff <= halfArc) {
+                        const isDead = bossSlime.takeDamage(player.attackDamage);
+                        if (isDead) {
+                            console.log("🏆 BOSS DEFEATED! LEGENDARY LOOT!");
+                            // Boss respawns after 10 seconds
+                            setTimeout(() => {
+                                const x = Math.random() * (canvas.width - 100);
+                                const y = Math.random() * (canvas.height - 100);
+                                bossSlime = new BossSlime(x, y);
+                                console.log("👑 BOSS HAS RESPAWNED!");
+                            }, 10000);
+                        }
+                    }
+                }
+            }
+            
+            // Check normal slimes
+            for (let i = slimes.length - 1; i >= 0; i--) {
+                const slime = slimes[i];
+                const slimeCenterX = slime.x + slime.width / 2;
+                const slimeCenterY = slime.y + slime.height / 2;
+                
+                const dx = slimeCenterX - playerCenterX;
+                const dy = slimeCenterY - playerCenterY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance <= player.attackRange) {
+                    const angleToSlime = Math.atan2(dy, dx);
+                    const attackAngle = Math.atan2(player.attackDirection.y, player.attackDirection.x);
+                    const halfArc = (player.attackAngle * Math.PI / 180) / 2;
+                    
+                    let angleDiff = Math.abs(angleToSlime - attackAngle);
+                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                    
+                    if (angleDiff <= halfArc) {
+                        const isDead = slime.takeDamage(player.attackDamage);
+                        if (isDead) {
+                            slimes.splice(i, 1);
+                            console.log("💀 Slime defeated!");
+                            
+                            setTimeout(() => {
+                                const x = Math.random() * (canvas.width - 50);
+                                const y = Math.random() * (canvas.height - 50);
+                                slimes.push(new Slime(x, y));
+                                console.log("👾 New slime spawned!");
+                            }, 3000);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Render Everything
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#2ecc71';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.3;
+            
+            for (let x = 0; x < canvas.width; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = 0; y < canvas.height; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            ctx.globalAlpha = 1;
+            
+            // Draw dash trail
+            for (let i = 0; i < player.dashTrail.length; i++) {
+                const trail = player.dashTrail[i];
+                const alpha = trail.life / 200;
+                
+                ctx.fillStyle = `rgba(243, 156, 18, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(trail.x, trail.y, 8 * alpha, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            
+            // Draw drops first (behind everything)
+            for (let i = drops.length - 1; i >= 0; i--) {
+                const drop = drops[i];
+                if (drop.update()) {
+                    drops.splice(i, 1); // Remove collected drops
+                } else {
+                    drop.render();
+                }
+            }
+            
+            // Draw slimes
+            slimes.forEach(slime => slime.render());
+            
+            // Draw boss slime
+            if (bossSlime && !bossSlime.defeated) {
+                bossSlime.render();
+            }
+            
+            // Draw player (with invulnerability flashing)
+            let playerVisible = true;
+            if (player.invulnerable) {
+                playerVisible = Math.floor(gameTime / 100) % 2 === 0; // Flash every 100ms
+            }
+            
+            if (playerVisible) {
+                let playerColor = player.color;
+                if (player.isDashing) playerColor = '#f39c12'; // Orange while dashing
+                else if (player.isAttacking) playerColor = '#c0392b';
+                
+                ctx.fillStyle = playerColor;
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+                
+                ctx.strokeStyle = player.isDashing ? '#e67e22' : '#c0392b';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(player.x, player.y, player.width, player.height);
+            }
+            
+            // Draw attack arc
+            if (player.isAttacking) {
+                drawAttackArc();
+            }
+            
+            // Movement indicator
+            if (player.isMoving && !player.isDashing) {
+                ctx.fillStyle = '#f39c12';
+                const centerX = player.x + player.width / 2;
+                const centerY = player.y + player.height / 2;
+                const arrowLength = 20;
+                
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(
+                    centerX + (player.direction.x * arrowLength), 
+                    centerY + (player.direction.y * arrowLength)
+                );
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#f39c12';
+                ctx.stroke();
+            }
+            
+            // Mouse cursor
+            ctx.fillStyle = '#e67e22';
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        
+        function drawAttackArc() {
+            const centerX = player.x + player.width / 2;
+            const centerY = player.y + player.height / 2;
+            
+            const attackAngleRad = Math.atan2(player.attackDirection.y, player.attackDirection.x);
+            const halfArc = (player.attackAngle * Math.PI / 180) / 2;
+            
+            ctx.strokeStyle = '#e74c3c';
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
+            ctx.lineWidth = 3;
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(centerX, centerY, player.attackRange, 
+                   attackAngleRad - halfArc, attackAngleRad + halfArc);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            ctx.strokeStyle = '#c0392b';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(
+                centerX + (player.attackDirection.x * player.attackRange),
+                centerY + (player.attackDirection.y * player.attackRange)
+            );
+            ctx.stroke();
+        }
+        
+        // Update UI
+        function updateUI() {
+            // Health bar
+            const healthPercent = player.health / player.maxHealth;
+            document.getElementById('playerHealthFill').style.width = (healthPercent * 100) + '%';
+            
+            // Dash cooldown
+            const dashCooldownPercent = Math.max(0, 1 - (player.dashCooldownTimer / player.dashCooldown));
+            document.getElementById('dashCooldownFill').style.width = (dashCooldownPercent * 100) + '%';
+        }
+        
+        // Update stats
+        function updateStats() {
+            const status = player.isDashing ? "DASHING" : 
+                          player.isAttacking ? "ATTACKING" : 
+                          player.invulnerable ? "INVULNERABLE" : "Ready";
+            
+            const bossStatus = (bossSlime && !bossSlime.defeated) ? "ALIVE" : "DEFEATED";
+            const dropCount = drops.length;
+            
+            document.getElementById('gameStats').textContent = 
+                `Position: (${Math.round(player.x)}, ${Math.round(player.y)}) | Slimes: ${slimes.length} | Boss: ${bossStatus} | Drops: ${dropCount} | Status: ${status} | HP: ${player.health}`;
+        }
+        
+        // Update slimes and boss
+        function updateSlimes() {
+            slimes.forEach(slime => slime.update());
+            if (bossSlime && !bossSlime.defeated) {
+                bossSlime.update();
+            }
+        }
+        
+        // Main Game Loop
+        function gameLoop() {
+            if (gameRunning) {
+                gameTime += 16; // Approximate 60fps timing
+                
+                updatePlayer();
+                updateSlimes();
+                render();
+                updateUI();
+                updateStats();
+                
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Start the game!
+        console.log("🎮 Monster Hunter Complete - Game Started!");
+        console.log("🏃‍♂️ Press Shift to dash (I-frames!)");
+        console.log("⚔️ Hold mouse to attack slimes");
+        console.log("🛡️ Blue slimes have shields - hit twice to break!");
+        console.log("👑 PURPLE BOSS SLIME - 5 shield hits, drops 1-4 loot!");
+        console.log("💎 Walk over glowing drops to collect them!");
+        
+        spawnSlimes();
+        gameLoop();
+    </script>
+</body>
+</html>
