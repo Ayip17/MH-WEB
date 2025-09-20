@@ -255,6 +255,190 @@ function createImpactSparks(x, y, count = 6) {
   }
 }
 
+  /* Roguelike Upgrade Choice System */
+  let upgradeMenuActive = false;
+  const upgradeChoices = [];
+
+  const upgradeTypes = {
+    health: { name: 'Health Boost', desc: '+50 Max Health', color: '#e74c3c' },
+    speed: { name: 'Speed Boost', desc: '+1 Movement Speed', color: '#2ecc71' },
+    damage: { name: 'Damage Boost', desc: '+10 Attack Damage', color: '#f39c12' },
+    multishot: { name: 'Multishot', desc: 'Fire Multiple Projectiles', color: '#9b59b6' },
+    homing: { name: 'Homing Missiles', desc: 'Projectiles Track Enemies', color: '#1abc9c' },
+    laser: { name: 'Piercing Laser', desc: 'Projectiles Pierce Through Enemies', color: '#f1c40f' },
+    dashCooldown: { name: 'Dash Mastery', desc: 'Faster Dash Cooldown', color: '#3498db' },
+    attackSpeed: { name: 'Rapid Fire', desc: 'Faster Attack Rate', color: '#e67e22' }
+  };
+
+  function generateUpgradeChoices() {
+    upgradeChoices.length = 0;
+    const availableUpgrades = Object.keys(upgradeTypes);
+    
+    // Generate 3 random unique choices
+    while (upgradeChoices.length < 3) {
+      const randomUpgrade = availableUpgrades[Math.floor(Math.random() * availableUpgrades.length)];
+      if (!upgradeChoices.includes(randomUpgrade)) {
+        upgradeChoices.push(randomUpgrade);
+      }
+    }
+  }
+
+  function applyUpgrade(upgradeType) {
+    switch(upgradeType) {
+      case 'health':
+        player.maxHealth += 50;
+        player.health = Math.min(player.maxHealth, player.health + 25); // Also heal a bit
+        console.log("❤️ Health boosted! Max HP:", player.maxHealth);
+        break;
+      case 'speed':
+        player.speed += 1;
+        console.log("🏃 Speed boosted! Speed:", player.speed);
+        break;
+      case 'damage':
+        player.damageUpgradesCount += 1; // Increment counter
+        player.attackDamage += 8; // Increase from +5 to +8 for more impact
+        console.log("⚔️ Damage boosted! Damage:", player.attackDamage);
+        break;
+      case 'multishot':
+        player.multishot += 1;
+        // Remove other shot types for balance
+        player.hasHoming = false;
+        player.hasLaser = false;
+        console.log("🎯 Multishot upgraded! Bullets:", player.multishot);
+        break;
+      case 'homing':
+        player.hasHoming = true;
+        // Remove other shot types for balance
+        player.hasLaser = false;
+        console.log("🎯 Homing missiles unlocked!");
+        break;
+      case 'laser':
+        player.hasLaser = true;
+        // Remove other shot types for balance
+        player.hasHoming = false;
+        console.log("⚡ Piercing laser unlocked!");
+        break;
+      case 'dashCooldown':
+        player.dashCooldown = Math.max(300, player.dashCooldown - 150);
+        console.log("🏃‍♂️ Dash improved! Cooldown:", player.dashCooldown);
+        break;
+      case 'attackSpeed':
+        player.attackDuration = Math.max(50, player.attackDuration - 20);
+        console.log("⚡ Attack speed boosted! Rate:", player.attackDuration);
+        break;
+    }
+  }
+
+  function showUpgradeMenu() {
+    upgradeMenuActive = true;
+    gameRunning = false; // Pause game
+    generateUpgradeChoices();
+    renderUpgradeMenu();
+  }
+
+  function hideUpgradeMenu() {
+    upgradeMenuActive = false;
+    gameRunning = true;
+    gameRunning = true;
+    requestAnimationFrame(gameLoop);
+  }
+
+  function renderUpgradeMenu() {
+  if (!upgradeMenuActive) return;
+  
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'upgradeMenu';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(44, 62, 80, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    font-family: Arial, sans-serif;
+  `;
+  
+  // Create menu content
+  overlay.innerHTML = `
+    <div style="background: #34495e; padding: 40px; border-radius: 15px; text-align: center; max-width: 800px;">
+      <h1 style="color: #f1c40f; margin-bottom: 30px; font-size: 2.5em;">🏆 BOSS DEFEATED!</h1>
+      <h2 style="color: #ecf0f1; margin-bottom: 40px;">Choose Your Upgrade:</h2>
+      
+      <div style="display: flex; gap: 30px; justify-content: center;">
+        ${upgradeChoices.map((choice, index) => {
+          const upgrade = upgradeTypes[choice];
+          return `
+            <div class="upgrade-choice" data-upgrade="${choice}" style="
+              background: ${upgrade.color};
+              color: white;
+              padding: 30px;
+              border-radius: 10px;
+              cursor: pointer;
+              min-width: 200px;
+              border: 3px solid transparent;
+              transition: all 0.3s ease;
+            ">
+              <h3 style="margin: 0 0 15px 0; font-size: 1.4em;">${upgrade.name}</h3>
+              <p style="margin: 0; font-size: 1.1em;">${upgrade.desc}</p>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      
+      <p style="color: #bdc3c7; margin-top: 30px; font-size: 1.1em;">Click an upgrade to continue to Stage ${stage + 1}</p>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // Add hover effects
+  const choices = overlay.querySelectorAll('.upgrade-choice');
+  choices.forEach(choice => {
+    choice.addEventListener('mouseenter', () => {
+      choice.style.border = '3px solid #ecf0f1';
+      choice.style.transform = 'scale(1.05)';
+    });
+    
+    choice.addEventListener('mouseleave', () => {
+      choice.style.border = '3px solid transparent';
+      choice.style.transform = 'scale(1)';
+    });
+    
+    choice.addEventListener('click', () => {
+      const upgradeType = choice.getAttribute('data-upgrade');
+      selectUpgrade(upgradeType);
+    });
+  });
+}
+
+function selectUpgrade(upgradeType) {
+  console.log("DEBUG: Selecting upgrade:", upgradeType);
+  applyUpgrade(upgradeType);
+  
+  // Remove upgrade menu
+  const menu = document.getElementById('upgradeMenu');
+  if (menu) menu.remove();
+  
+  console.log("DEBUG: About to hide menu and proceed to stage", stage + 1);
+  hideUpgradeMenu();
+  
+  // Proceed to next stage
+  stage++;
+  console.log("DEBUG: Stage incremented to", stage);
+  
+  setTimeout(() => {
+    console.log("DEBUG: Spawning stage", stage, "boss");
+    spawnStageBoss(stage);
+    startSlimeWave(stage);
+    console.log("DEBUG: Stage transition complete");
+  }, 1000);
+}
+
 /* Projectile System */
 const projectiles = [];
 
@@ -280,31 +464,44 @@ class Projectile {
   }
   
   update() {
-  // Homing logic
-  if (this.homing && this.target && !this.target.defeated && !this.hitTargets.includes(this.target)) {
-    const targetX = this.target.x + this.target.width/2;
-    const targetY = this.target.y + this.target.height/2;
-    const dx = targetX - this.x;
-    const dy = targetY - this.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    
-    if (dist > 10) { // Stop homing when very close
-      const turnSpeed = 0.05; // Slower turn rate
-      const targetDirX = dx / dist;
-      const targetDirY = dy / dist;
-      
-      // Gradual turn towards target
-      this.dirX = this.dirX * (1 - turnSpeed) + targetDirX * turnSpeed;
-      this.dirY = this.dirY * (1 - turnSpeed) + targetDirY * turnSpeed;
-      
-      // Normalize to maintain speed
-      const currentMagnitude = Math.sqrt(this.dirX*this.dirX + this.dirY*this.dirY);
-      if (currentMagnitude > 0) {
-        this.dirX /= currentMagnitude;
-        this.dirY /= currentMagnitude;
+  // Homing logic (classic shoot-em-up style - no retargeting)
+  if (this.homing && this.target && this.lockOnTarget) {
+    // Only home if target is still alive and not already hit
+    let targetValid = false;
+    if (!this.hitTargets.includes(this.target)) {
+      if (this.target === bossSlime && !bossSlime.defeated) {
+        targetValid = true;
+      } else if (slimes.includes(this.target)) {
+        targetValid = true;
       }
     }
+    
+    // If target is invalid, missile continues in straight line (classic behavior)
+    if (targetValid) {
+      const targetX = this.target.x + this.target.width/2;
+      const targetY = this.target.y + this.target.height/2;
+      const dx = targetX - this.x;
+      const dy = targetY - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist > 10) {
+        const turnSpeed = 0.35;
+        const targetDirX = dx / dist;
+        const targetDirY = dy / dist;
+        
+        this.dirX += (targetDirX - this.dirX) * turnSpeed;
+        this.dirY += (targetDirY - this.dirY) * turnSpeed;
+        
+        const magnitude = Math.sqrt(this.dirX*this.dirX + this.dirY*this.dirY);
+        if (magnitude > 0) {
+          this.dirX /= magnitude;
+          this.dirY /= magnitude;
+        }
+      }
+    }
+    // If target dies/invalid, missile just continues straight - no retargeting
   }
+
   
   // Movement
   this.x += this.dirX * this.speed;
@@ -361,6 +558,36 @@ class Projectile {
     ctx.fill();
     ctx.shadowBlur = 0;
   }
+
+  findNewTarget() {
+    let newTarget = null;
+    let minDist = Infinity;
+    
+    // Check slimes
+    slimes.forEach(slime => {
+      if (!this.hitTargets.includes(slime)) {
+        const dx = slime.x - this.x;
+        const dy = slime.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < minDist) {
+          minDist = dist;
+          newTarget = slime;
+        }
+      }
+    });
+    
+    // Check boss
+    if (bossSlime && !bossSlime.defeated && !this.hitTargets.includes(bossSlime)) {
+      const dx = bossSlime.x - this.x;
+      const dy = bossSlime.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < minDist) {
+        newTarget = bossSlime;
+      }
+    }
+    
+    return newTarget;
+  }
 }
 
 /* Message queue (same as yours) */
@@ -386,7 +613,7 @@ const player = {
   invulnerable:false, invulnerabilityTime:500, invulnerabilityTimer:0,
   isDashing:false, dashSpeed:20, dashDuration:150, dashCooldown:700, dashTimer:0, dashCooldownTimer:0, dashDirection:{x:0,y:0}, dashTrail:[],
   isMoving:false, direction:{x:0,y:0},
-  isAttacking:false, attackRange:150, attackAngle:45, attackDirection:{x:1,y:0}, attackCooldown:0, attackDuration:100, attackDamage:20,
+  isAttacking:false, attackRange:150, attackAngle:45, attackDirection:{x:1,y:0}, attackCooldown:0, attackDuration:100, attackDamage:10, damageUpgradesCount: 0,
 
   // Power-up properties (combo system)
   multishot: 1,
@@ -406,17 +633,21 @@ let waveSpawnRate = 2000; // milliseconds between spawns
 let maxSlimes = 50; // cap untuk performance
 let slimeSpawnRate = 1; // slimes per spawn burst
 
+let totalWaveSlimes = 0;
+let maxWaveSlimes = 0;
+
 function startSlimeWave(stage) {
   waveActive = true;
   waveTimer = 0;
+  totalWaveSlimes = 0; // Reset counter
   
-  // Scale swarm intensity by stage (reduced)
-  waveSpawnRate = Math.max(1500, 3000 - (stage * 300)); // Slower spawns
-  maxSlimes = 8 + (stage * 4); // Fewer concurrent slimes
-  slimeSpawnRate = Math.min(2, 1 + Math.floor(stage / 3)); // Less per burst
+  // Finite wave sizes per stage
+  maxWaveSlimes = 6 + (stage * 3); // Total slimes in this wave
+  waveSpawnRate = Math.max(2000, 4000 - (stage * 400)); // Slower spawn rate
+  slimeSpawnRate = 1; // Always 1 per spawn for better pacing
   
-  console.log(`🌊 SLIME SWARM WAVE! Rate: ${waveSpawnRate}ms, Max: ${maxSlimes}, Burst: ${slimeSpawnRate}`);
-  showMessage("🌊 SLIME SWARM INCOMING!", "#e74c3c");
+  console.log(`🌊 WAVE ${stage}! Total slimes: ${maxWaveSlimes}, Rate: ${waveSpawnRate}ms`);
+  showMessage(`🌊 WAVE ${stage} - ${maxWaveSlimes} SLIMES!`, "#e74c3c");
 }
 
 function updateSlimeWave() {
@@ -424,12 +655,16 @@ function updateSlimeWave() {
   
   waveTimer += 16;
   
-  // Spawn new slimes if under limit and timer ready
-  if (waveTimer >= waveSpawnRate && slimes.length < maxSlimes) {
+  // Spawn if timer ready and haven't reached wave limit
+  if (waveTimer >= waveSpawnRate && totalWaveSlimes < maxWaveSlimes) {
     waveTimer = 0;
+    spawnRandomSlime();
+    totalWaveSlimes++;
     
-    for (let i = 0; i < slimeSpawnRate; i++) {
-      spawnRandomSlime();
+    // End wave when all slimes spawned
+    if (totalWaveSlimes >= maxWaveSlimes) {
+      waveActive = false;
+      console.log(`✅ Wave ${stage} complete! ${maxWaveSlimes} slimes spawned`);
     }
   }
 }
@@ -478,127 +713,127 @@ function spawnPositionAwayFromPlayer(minDist=120){
 }
 
 /* ---------- Drop class (unchanged visuals/behavior) ---------- */
-class Drop {
-  constructor(x, y, type = null) {
-    this.x = x;
-    this.y = y;
-    this.width = 12;
-    this.height = 12;
-    this.type = type || this.getRandomType();
-    this.color = this.getColorForType(this.type);
-    this.bounceY = 0;
-    this.bounceSpeed = 2;
-    this.collected = false;
-    this.glowEffect = 0;
-  }
+// class Drop {
+//   constructor(x, y, type = null) {
+//     this.x = x;
+//     this.y = y;
+//     this.width = 12;
+//     this.height = 12;
+//     this.type = type || this.getRandomType();
+//     this.color = this.getColorForType(this.type);
+//     this.bounceY = 0;
+//     this.bounceSpeed = 2;
+//     this.collected = false;
+//     this.glowEffect = 0;
+//   }
   
-  getRandomType() {
-    const types = ['health', 'speed', 'damage', 'dash', 'multishot', 'homing', 'laser'];
-    return types[Math.floor(Math.random() * types.length)];
-  }
+//   getRandomType() {
+//     const types = ['health', 'speed', 'damage', 'dash', 'multishot', 'homing', 'laser'];
+//     return types[Math.floor(Math.random() * types.length)];
+//   }
   
-  getColorForType(type) {
-    const colors = {
-      health: '#e74c3c',     // Red - Health boost
-      speed: '#2ecc71',      // Green - Speed boost  
-      damage: '#f39c12',     // Orange - Damage boost
-      dash: '#3498db',       // Blue - Dash upgrade
-      multishot: '#9b59b6',  // Purple - Multi projectiles
-      homing: '#1abc9c',     // Teal - Homing missiles
-      laser: '#f1c40f'       // Yellow - Laser beam
-    };
-    return colors[type];
-  }
+//   getColorForType(type) {
+//     const colors = {
+//       health: '#e74c3c',     // Red - Health boost
+//       speed: '#2ecc71',      // Green - Speed boost  
+//       damage: '#f39c12',     // Orange - Damage boost
+//       dash: '#3498db',       // Blue - Dash upgrade
+//       multishot: '#9b59b6',  // Purple - Multi projectiles
+//       homing: '#1abc9c',     // Teal - Homing missiles
+//       laser: '#f1c40f'       // Yellow - Laser beam
+//     };
+//     return colors[type];
+//   }
   
-  update() {
-    this.bounceY += this.bounceSpeed;
-    if (this.bounceY > 10 || this.bounceY < -10) this.bounceSpeed *= -1;
-    this.glowEffect += 0.1;
+//   update() {
+//     this.bounceY += this.bounceSpeed;
+//     if (this.bounceY > 10 || this.bounceY < -10) this.bounceSpeed *= -1;
+//     this.glowEffect += 0.1;
     
-    const dx = (player.x + player.width/2) - (this.x + this.width/2);
-    const dy = (player.y + player.height/2) - (this.y + this.height/2);
-    const distance = Math.sqrt(dx * dx + dy * dy);
+//     const dx = (player.x + player.width/2) - (this.x + this.width/2);
+//     const dy = (player.y + player.height/2) - (this.y + this.height/2);
+//     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    if (distance < 25) {
-      this.collected = true;
-      this.applyPowerUp();
-      return true;
-    }
-    return false;
-  }
+//     if (distance < 25) {
+//       this.collected = true;
+//       this.applyPowerUp();
+//       return true;
+//     }
+//     return false;
+//   }
   
-  applyPowerUp() {
-    console.log("🎯 DROP TYPE:", this.type);
-    switch(this.type) {
-      case 'health':
-        player.health = Math.min(player.maxHealth, player.health + 50);
-        console.log("❤️ Health restored! HP: " + player.health);
-        break;
-      case 'speed':
-        player.speed += 1;
-        console.log("🏃 Speed boost! Speed: " + player.speed);
-        break;
-      case 'damage':
-        player.attackDamage += 5;
-        console.log("⚔️ Damage boost! Damage: " + player.attackDamage);
-        break;
-      case 'dash':
-        player.dashCooldown = Math.max(200, player.dashCooldown - 100);
-        player.dashDuration += 20;
-        console.log("🏃‍♂️ Dash upgraded! Cooldown: " + player.dashCooldown);
-        break;
-      case 'multishot':
-        player.multishot = (player.multishot || 1) + 1;
-        console.log("🎯 Multishot! Bullets: " + player.multishot);
-        break;
-      case 'homing':
-        player.hasHoming = true;
-        console.log("🎯 HOMING added to arsenal! Multishot + Homing combo!");
-        break;
-      case 'laser':
-        player.hasLaser = true;
-        console.log("⚡ LASER added to arsenal! All weapons combo!");
-        break;
-    }
-  }
+//   applyPowerUp() {
+//     console.log("🎯 DROP TYPE:", this.type);
+//     switch(this.type) {
+//       case 'health':
+//         player.health = Math.min(player.maxHealth, player.health + 50);
+//         console.log("❤️ Health restored! HP: " + player.health);
+//         break;
+//       case 'speed':
+//         player.speed += 1;
+//         console.log("🏃 Speed boost! Speed: " + player.speed);
+//         break;
+//       case 'damage':
+//         player.attackDamage += 5;
+//         console.log("⚔️ Damage boost! Damage: " + player.attackDamage);
+//         break;
+//       case 'dash':
+//         player.dashCooldown = Math.max(200, player.dashCooldown - 100);
+//         player.dashDuration += 20;
+//         console.log("🏃‍♂️ Dash upgraded! Cooldown: " + player.dashCooldown);
+//         break;
+//       case 'multishot':
+//         player.multishot = (player.multishot || 1) + 1;
+//         console.log("🎯 Multishot! Bullets: " + player.multishot);
+//         break;
+//       case 'homing':
+//         player.hasHoming = true;
+//         console.log("🎯 HOMING added to arsenal! Multishot + Homing combo!");
+//         break;
+//       case 'laser':
+//         player.hasLaser = true;
+//         console.log("⚡ LASER added to arsenal! All weapons combo!");
+//         break;
+//     }
+//   }
   
-  render() {
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur = 10 + Math.sin(this.glowEffect) * 5;
+//   render() {
+//     ctx.shadowColor = this.color;
+//     ctx.shadowBlur = 10 + Math.sin(this.glowEffect) * 5;
     
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y + this.bounceY, this.width, this.height);
+//     ctx.fillStyle = this.color;
+//     ctx.fillRect(this.x, this.y + this.bounceY, this.width, this.height);
     
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.fillRect(this.x + 2, this.y + this.bounceY + 2, this.width - 4, this.height - 4);
+//     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+//     ctx.fillRect(this.x + 2, this.y + this.bounceY + 2, this.width - 4, this.height - 4);
     
-    // Draw power-up icon
-    ctx.fillStyle = '#fff';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(this.getIconForType(this.type), this.x + this.width/2, this.y + this.bounceY + 8);
+//     // Draw power-up icon
+//     ctx.fillStyle = '#fff';
+//     ctx.font = '8px monospace';
+//     ctx.textAlign = 'center';
+//     ctx.fillText(this.getIconForType(this.type), this.x + this.width/2, this.y + this.bounceY + 8);
     
-    ctx.shadowBlur = 0;
-  }
+//     ctx.shadowBlur = 0;
+//   }
   
-  getIconForType(type) {
-    const icons = {
-      health: '+',
-      speed: '»',
-      damage: '!',
-      dash: '~',
-      multishot: '≡',
-      homing: '○',
-      laser: '|'
-    };
-    return icons[type];
-  }
-}
+//   getIconForType(type) {
+//     const icons = {
+//       health: '+',
+//       speed: '»',
+//       damage: '!',
+//       dash: '~',
+//       multishot: '≡',
+//       homing: '○',
+//       laser: '|'
+//     };
+//     return icons[type];
+//   }
+// }
 
 /* ---------- Slime class (kept behavior) ---------- */
 class Slime {
   constructor(x,y){
-    this.x=x; this.y=y; this.width=25; this.height=25; this.color='#3498db'; this.speed=2;
+    this.x=x; this.y=y; this.width=25; this.height=25; this.color='#3498db'; this.speed=1.5;
     this.maxHealth=150; this.health=150;
     this.hasShield=true; this.shieldHits=2; this.maxShieldHits=2;
     this.attackDamage=50; this.attackRange=20; this.attackCooldown=2000; this.attackTimer=0;
@@ -881,23 +1116,23 @@ landAerialPound() {
 
     if (this.health <= 0) {
       this.defeated = true;
-      this.dropLoot();
+      // this.dropLoot();
       console.log("🏆 BOSS DEFEATED! LOOT INCOMING!");
       return true;
     }
     return false;
   }
 
-  dropLoot() {
-    const dropCount = Math.floor(Math.random() * 4) + 1;
-    for (let i = 0; i < dropCount; i++) {
-      const angle = (Math.PI * 2 * i) / dropCount;
-      const distance = 40;
-      const dropX = this.x + this.width / 2 + Math.cos(angle) * distance;
-      const dropY = this.y + this.height / 2 + Math.sin(angle) * distance;
-      drops.push(new Drop(dropX - 6, dropY - 6));
-    }
-  }
+  // dropLoot() {
+  //   const dropCount = Math.floor(Math.random() * 4) + 1;
+  //   for (let i = 0; i < dropCount; i++) {
+  //     const angle = (Math.PI * 2 * i) / dropCount;
+  //     const distance = 40;
+  //     const dropX = this.x + this.width / 2 + Math.cos(angle) * distance;
+  //     const dropY = this.y + this.height / 2 + Math.sin(angle) * distance;
+  //     drops.push(new Drop(dropX - 6, dropY - 6));
+  //   }
+  // }
 
   render() {
     if (this.defeated) return;
@@ -1137,6 +1372,21 @@ fireMultishot(pcx, pcy, player.attackDirection.x, player.attackDirection.y);
 }
 
 function fireMultishot(x, y, dirX, dirY) {
+  // Pre-assign targets for homing if we have multishot + homing
+  let availableTargets = [];
+  if (player.hasHoming) {
+    // Collect all available enemies
+    slimes.forEach(slime => availableTargets.push(slime));
+    if (bossSlime && !bossSlime.defeated) availableTargets.push(bossSlime);
+    
+    // Sort by distance for closest-first targeting
+    availableTargets.sort((a, b) => {
+      const distA = Math.sqrt((a.x - x)**2 + (a.y - y)**2);
+      const distB = Math.sqrt((b.x - x)**2 + (b.y - y)**2);
+      return distA - distB;
+    });
+  }
+
   for (let i = 0; i < player.multishot; i++) {
     let shotDirX = dirX, shotDirY = dirY;
     
@@ -1152,7 +1402,6 @@ function fireMultishot(x, y, dirX, dirY) {
     let speed = 8;
     let damage = player.attackDamage;
     
-    // Apply laser properties if available
     if (player.hasLaser) {
       color = '#00ffff';
       speed = 12;
@@ -1161,15 +1410,16 @@ function fireMultishot(x, y, dirX, dirY) {
     
     const projectile = new Projectile(x, y, shotDirX, shotDirY, speed, damage, color);
     
-    // Apply combined abilities
     if (player.hasLaser) {
       projectile.piercing = true;
       projectile.maxPierceHits = 3;
     }
     
-    if (player.hasHoming) {
+    if (player.hasHoming && availableTargets.length > 0) {
       projectile.homing = true;
-      projectile.target = findNearestEnemy(x, y);
+      // Assign different targets to each projectile (cycle through available targets)
+      projectile.target = availableTargets[i % availableTargets.length];
+      projectile.lockOnTarget = true; // Add flag to prevent retargeting
     }
     
     projectiles.push(projectile);
@@ -1180,7 +1430,6 @@ function fireMultishot(x, y, dirX, dirY) {
   if (player.hasHoming) abilities.push('Homing');
   console.log(`🎯 COMBINED SHOT! ${abilities.join(' + ')}`);
 }
-
 function findNearestEnemy(x, y) {
   let target = null;
   let minDist = Infinity;
@@ -1266,41 +1515,24 @@ function checkProjectileHits() {
         startScreenShake(4, 150);
         const dead = bossSlime.takeDamage(proj.damage);
         
+        // Handle boss death BEFORE removing projectile
+        if (dead) {
+          console.log("🏆 BOSS DEFEATED!");
+          waveActive = false;
+          setTimeout(() => {
+            showUpgradeMenu();
+          }, 1500);
+        }
+        
         if (proj.piercing) {
           proj.hitTargets.push(bossSlime);
           proj.currentPierceHits++;
           hit = proj.currentPierceHits >= proj.maxPierceHits;
         } else {
-          hit = true;
+          projectiles.splice(i, 1); // Remove immediately for non-piercing
+          continue; // Now safe to continue since death check is done
         }
-        
-        if (dead) {
-          // boss death logic
-          if (dead) {
-            console.log("🏆 BOSS DEFEATED! LEGENDARY LOOT!");
-            console.log("DEBUG: Current stage:", stage, "Moving to next stage");
-            waveActive = false;
-            
-            if(stage === 1){
-              stage = 2;
-              setTimeout(()=>{ 
-                spawnStageBoss(2); 
-                startSlimeWave(2);
-              }, 10000);
-            } else {
-              stage++;
-              setTimeout(()=>{ 
-                spawnStageBoss(stage);
-                startSlimeWave(stage);
-              }, 10000);
-            }
-          }
-        }
-              // Remove projectile if it hit something
-              if (hit) {
-                projectiles.splice(i, 1);
-        }
-      }    
+      }
     }
     
     // Check normal slimes
@@ -1399,11 +1631,15 @@ function checkAttackHits(){
 function spawnStageBoss(stageNum){
   const pos = spawnPositionAwayFromPlayer(120);
   bossSlime = new BossSlime(pos.x, pos.y);
+
+  // Reduced health scaling - was 800 + stageNum*300
+  bossSlime.maxHealth = 600 + stageNum*200; // More reasonable: 800, 1000, 1200 instead of 1100, 1400, 1700
+  bossSlime.health = bossSlime.maxHealth;
   
   // Progressive scaling untuk handle combo weapons
-  bossSlime.maxHealth = 800 + stageNum*400; // Much tankier
+  bossSlime.maxHealth = 800 + stageNum*300; // Stage 1: 1100 HP instead of 700
   bossSlime.health = bossSlime.maxHealth;
-  bossSlime.attackDamage = 80 + stageNum*30; // More dangerous
+  bossSlime.attackDamage = 80 + stageNum*20;
   bossSlime.shieldHits = bossSlime.maxShieldHits = 8 + stageNum*3; // Stronger shields
   bossSlime.chargeSpeed = 3 + stageNum*0.5;
   bossSlime.speed = 1.5 + stageNum*0.3; // Faster movement
@@ -1603,12 +1839,14 @@ function updateStats(){
 
 /* ---------- Main loop ---------- */
 function gameLoop(){
-  if(!gameRunning) return;
+  if(!gameRunning) {
+    console.log("DEBUG: gameLoop stopped, gameRunning is false");
+    return;
+  }
+  
   gameTime += 16;
+  updateHitStop();
   
-  updateHitStop(); // Always update hit stop timer
-  
-  // Only update game logic if NOT in hit stop
   if (!hitStop.active) {
     updatePlayer();
     updateSlimes();
@@ -1616,17 +1854,30 @@ function gameLoop(){
     updateSlimeWave();
   }
   
-  updateScreenShake(); // Visual effects still run during hit stop
+  updateScreenShake();
   render();
-  updateUI(); updateStats(); renderMessageLog();
+  updateUI(); 
+  updateStats(); 
+  renderMessageLog();
   checkGameOver();
-  if(gameRunning) requestAnimationFrame(gameLoop);
+  
+  if(gameRunning) {
+    requestAnimationFrame(gameLoop);
+  } else {
+    console.log("DEBUG: gameRunning became false during loop execution");
+  }
 }
 
 /* ---------- Scaling & spawn helpers ---------- */
 function scaleStatsForStage(s){
   // player.maxHealth = 100 + (s-1)*200; player.health = player.maxHealth;
-  player.speed = 6 + (s-1)*0.5; player.attackDamage = 20 + (s-1)*5;
+  player.speed = 6 + (s-1)*0.5; player.attackDamage = 10 + (s-1)*5;
+  // Base damage grows by 3 per stage + upgrade bonuses
+  const baseDamage = 10 + (s-1)*3;
+  const upgradeBonuses = player.damageUpgradesCount * 8;
+  player.attackDamage = baseDamage + upgradeBonuses;
+  
+  console.log(`📊 Stage ${s} damage scaling: Base ${baseDamage} + Upgrades ${upgradeBonuses} = ${player.attackDamage}`);
   if(bossSlime){
     bossSlime.maxHealth = 2000 + (s-1)*500; bossSlime.health = bossSlime.maxHealth;
     bossSlime.attackDamage = 100 + (s-1)*10; bossSlime.speed = 1.5 + (s-1)*0.3; bossSlime.chargeSpeed = 5 + (s-1)*0.5;
@@ -1636,32 +1887,52 @@ function scaleStatsForStage(s){
 
 /* ---------- Start / restart handlers (kept) ---------- */
 document.getElementById('restartBtn').onclick = function(){
-  player.x = canvas.width/2; player.y = canvas.height/2; player.health = player.maxHealth;
-
-  // Reset power-ups properly
-  player.multishot = 1;
-  player.hasHoming = false;  // ADD THIS
-  player.hasLaser = false;   // ADD THIS
-  player.speed = 6;
-  player.attackDamage = 20;
-  player.dashCooldown = 700;
-  player.dashDuration = 150;
+  player.x = canvas.width/2; 
+  player.y = canvas.height/2; 
   
-  // Reset wave system
-  waveActive = false;        // ADD THIS
-
+  // Reset power-ups to base values
   player.multishot = 1;
-  player.homingShots = 0;
-  player.laserShots = 0;
+  player.hasHoming = false;
+  player.hasLaser = false;
   player.speed = 6;
-  player.attackDamage = 20;
+  player.attackDamage = 10;
+  player.maxHealth = 500;
+  player.health = 500;
   player.dashCooldown = 700;
   player.dashDuration = 150;
-  player.invulnerable=false; player.invulnerabilityTimer=0; player.isDashing=false; player.dashTimer=0; player.dashCooldownTimer=0; player.dashTrail=[];
-  player.isAttacking=false; player.attackCooldown=0; player.attackDirection={x:1,y:0};
-  slimes.length=0; drops.length=0; bossSlime=null; stage=1; gameOver=false; gameRunning=true;
-  document.getElementById('gameOverOverlay').style.display='none';
-  spawnSlimes(); gameLoop();
+  player.attackDuration = 100;
+  player.damageUpgradesCount = 0;
+  
+  // Reset game state
+  waveActive = false;
+  upgradeMenuActive = false;
+  
+  // Remove upgrade menu if it exists
+  const menu = document.getElementById('upgradeMenu');
+  if (menu) menu.remove();
+  
+  // Reset player state
+  player.invulnerable = false; 
+  player.invulnerabilityTimer = 0; 
+  player.isDashing = false; 
+  player.dashTimer = 0; 
+  player.dashCooldownTimer = 0; 
+  player.dashTrail = [];
+  player.isAttacking = false; 
+  player.attackCooldown = 0; 
+  player.attackDirection = {x:1,y:0};
+  
+  // Reset arrays and game state
+  slimes.length = 0; 
+  drops.length = 0; 
+  bossSlime = null; 
+  stage = 1; 
+  gameOver = false; 
+  gameRunning = true;
+  
+  document.getElementById('gameOverOverlay').style.display = 'none';
+  spawnSlimes(); 
+  gameLoop();
 };
 
 function spawnSlimes(){
