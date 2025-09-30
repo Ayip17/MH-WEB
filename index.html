@@ -641,9 +641,9 @@ function startSlimeWave(stage) {
   waveTimer = 0;
   totalWaveSlimes = 0; // Reset counter
   
-  // Finite wave sizes per stage
-  maxWaveSlimes = 6 + (stage * 3); // Total slimes in this wave
-  waveSpawnRate = Math.max(2000, 4000 - (stage * 400)); // Slower spawn rate
+  // Reduced wave sizes per stage - was 6 + (stage * 3)
+  maxWaveSlimes = 4 + (stage * 2); // Stage 1: 6, Stage 2: 8, Stage 3: 10, Stage 4: 12
+  waveSpawnRate = Math.max(2000, 4000 - (stage * 400)); // Keep spawn timing same
   slimeSpawnRate = 1; // Always 1 per spawn for better pacing
   
   console.log(`🌊 WAVE ${stage}! Total slimes: ${maxWaveSlimes}, Rate: ${waveSpawnRate}ms`);
