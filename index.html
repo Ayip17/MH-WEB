@@ -1379,12 +1379,12 @@ function fireMultishot(x, y, dirX, dirY) {
     slimes.forEach(slime => availableTargets.push(slime));
     if (bossSlime && !bossSlime.defeated) availableTargets.push(bossSlime);
     
-    // Sort by distance for closest-first targeting
-    availableTargets.sort((a, b) => {
-      const distA = Math.sqrt((a.x - x)**2 + (a.y - y)**2);
-      const distB = Math.sqrt((b.x - x)**2 + (b.y - y)**2);
-      return distA - distB;
-    });
+    // // Sort by distance for closest-first targeting
+    // availableTargets.sort((a, b) => {
+    //   const distA = Math.sqrt((a.x - x)**2 + (a.y - y)**2);
+    //   const distB = Math.sqrt((b.x - x)**2 + (b.y - y)**2);
+    //   return distA - distB;
+    // });
   }
 
   for (let i = 0; i < player.multishot; i++) {
@@ -1417,9 +1417,33 @@ function fireMultishot(x, y, dirX, dirY) {
     
     if (player.hasHoming && availableTargets.length > 0) {
       projectile.homing = true;
-      // Assign different targets to each projectile (cycle through available targets)
-      projectile.target = availableTargets[i % availableTargets.length];
-      projectile.lockOnTarget = true; // Add flag to prevent retargeting
+      
+      // Find target closest to mouse direction
+      let bestTarget = null;
+      let bestScore = Infinity;
+      
+      availableTargets.forEach(enemy => {
+        const enemyX = enemy.x + enemy.width/2;
+        const enemyY = enemy.y + enemy.height/2;
+        
+        // Calculate angle difference between mouse direction and enemy direction
+        const enemyAngle = Math.atan2(enemyY - y, enemyX - x);
+        const mouseAngle = Math.atan2(shotDirY, shotDirX); // Use individual shot direction
+        let angleDiff = Math.abs(enemyAngle - mouseAngle);
+        if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+        
+        // Combine angle difference with distance for better targeting
+        const distance = Math.sqrt((enemyX - x)**2 + (enemyY - y)**2);
+        const score = angleDiff * 2 + (distance / 200); // Weight angle more than distance
+        
+        if (score < bestScore) {
+          bestScore = score;
+          bestTarget = enemy;
+        }
+      });
+      
+      projectile.target = bestTarget;
+      projectile.lockOnTarget = true;
     }
     
     projectiles.push(projectile);
@@ -1430,6 +1454,7 @@ function fireMultishot(x, y, dirX, dirY) {
   if (player.hasHoming) abilities.push('Homing');
   console.log(`🎯 COMBINED SHOT! ${abilities.join(' + ')}`);
 }
+
 function findNearestEnemy(x, y) {
   let target = null;
   let minDist = Infinity;
@@ -1514,14 +1539,19 @@ function checkProjectileHits() {
         createImpactSparks(proj.x, proj.y, 8);
         startScreenShake(4, 150);
         const dead = bossSlime.takeDamage(proj.damage);
-        
-        // Handle boss death BEFORE removing projectile
+
         if (dead) {
           console.log("🏆 BOSS DEFEATED!");
           waveActive = false;
           setTimeout(() => {
             showUpgradeMenu();
           }, 1500);
+          
+          // Self-destruct homing missiles after killing their target
+          if (proj.homing) {
+            projectiles.splice(i, 1);
+            continue;
+          }
         }
         
         if (proj.piercing) {
@@ -1569,7 +1599,13 @@ function checkProjectileHits() {
             }, 3000);
           }
           
+          
+           if (proj.homing) {
+          projectiles.splice(projectileIndex, 1); // Use the outer loop index
+          break;
+
           if (!proj.piercing) break;
+          }
         }
       }
     }
